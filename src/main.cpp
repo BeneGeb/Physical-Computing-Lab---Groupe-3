@@ -15,10 +15,10 @@
 int sensor_value = 0;
 
 // --- Audio setup ---
-Audio* audio;
+Audio *audio;
 
 // --- Camera setup ---
-const uint8_t END_MARKER[] = { 0xFF, 0xD9, 0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF };
+const uint8_t END_MARKER[] = {0xFF, 0xD9, 0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF};
 const size_t END_MARKER_LEN = sizeof(END_MARKER);
 const int MAX_IMAGE_SIZE = 100 * 256;
 uint8_t imageBuffer[MAX_IMAGE_SIZE];
@@ -26,33 +26,40 @@ size_t imageIndex = 0;
 
 unsigned long startTimeTimeout = 0;
 const unsigned long audioTimeout = 30000; // 30 seconds timeout for audio playback
-const unsigned long imageTimeout = 5000; // 5 seconds timeout for image capture
-
+const unsigned long imageTimeout = 5000;  // 5 seconds timeout for image capture
 
 const bool DEBUG_MODE = true;
 
-void debugPrint(String message) {
-    if(DEBUG_MODE) {
+void debugPrint(String message)
+{
+    if (DEBUG_MODE)
+    {
         Serial.print(message);
     }
 }
 
-void debugPrintln(String message) {
-    if(DEBUG_MODE) {
+void debugPrintln(String message)
+{
+    if (DEBUG_MODE)
+    {
         Serial.println(message);
     }
 }
 
-bool isLightOn() {
+bool isLightOn()
+{
     sensor_value = analogRead(PIN_LIGHT_SENSOR);
-    //debugPrintln("Current light sensor value: " + String(sensor_value));
+    // debugPrintln("Current light sensor value: " + String(sensor_value));
     return sensor_value < LIGHT_THRESHOLD;
 }
 
-void printRawImageData() {
+void printRawImageData()
+{
     Serial.println("Raw image data:");
-    for (size_t i = 0; i < imageIndex; i++) {
-        if (imageBuffer[i] < 16) {
+    for (size_t i = 0; i < imageIndex; i++)
+    {
+        if (imageBuffer[i] < 16)
+        {
             Serial.print("0");
         }
         Serial.print(String(imageBuffer[i], HEX) + " ");
@@ -60,20 +67,27 @@ void printRawImageData() {
     Serial.println("");
 }
 
-String urlEncode(const String& str) {
+String urlEncode(const String &str)
+{
     String encoded = "";
     char c;
     char code0;
     char code1;
-    for (int i = 0; i < str.length(); i++) {
+    for (int i = 0; i < str.length(); i++)
+    {
         c = str.charAt(i);
-        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~' || c == ' ') {
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~' || c == ' ')
+        {
             encoded += c;
-        } else {
+        }
+        else
+        {
             code1 = (c & 0xf) + '0';
-            if ((c & 0xf) > 9) code1 = (c & 0xf) - 10 + 'A';
+            if ((c & 0xf) > 9)
+                code1 = (c & 0xf) - 10 + 'A';
             code0 = ((c >> 4) & 0xf) + '0';
-            if (((c >> 4) & 0xf) > 9) code0 = ((c >> 4) & 0xf) - 10 + 'A';
+            if (((c >> 4) & 0xf) > 9)
+                code0 = ((c >> 4) & 0xf) - 10 + 'A';
             encoded += '%';
             encoded += code0;
             encoded += code1;
@@ -82,7 +96,8 @@ String urlEncode(const String& str) {
     return encoded;
 }
 
-void playTTSAudio(const String& input) {
+void playTTSAudio(const String &input)
+{
     String result = urlEncode(input);
     result.replace(" ", "+");
     String finalUrl = String(TTS_URL) + "text=" + result;
@@ -92,13 +107,16 @@ void playTTSAudio(const String& input) {
     audio->setVolume(10);
     audio->connecttohost(finalUrl.c_str());
     startTimeTimeout = millis();
-    while (1) {
+    while (1)
+    {
         audio->loop();
-        if (millis() - startTimeTimeout > audioTimeout) {
+        if (millis() - startTimeTimeout > audioTimeout)
+        {
             debugPrintln("Audio playback timeout reached.");
             break;
         }
-        if(!audio->isRunning()) {
+        if (!audio->isRunning())
+        {
             debugPrintln("Audio playback finished.");
             break;
         }
@@ -107,8 +125,8 @@ void playTTSAudio(const String& input) {
     delete audio;
 }
 
-
-String getAPIResponse(String inputText, bool sendImage = false) {
+String getAPIResponse(String inputText, bool sendImage = false)
+{
     String outputText = "Fehler bei der Kommunikation mit der API";
     String apiUrl = "https://api.openai.com/v1/chat/completions";
     String payload;
@@ -119,7 +137,8 @@ String getAPIResponse(String inputText, bool sendImage = false) {
     JsonObject userMessage = messages.createNestedObject();
     userMessage["role"] = "user";
 
-    if (sendImage) {
+    if (sendImage)
+    {
         JsonArray contentArray = userMessage.createNestedArray("content");
 
         JsonObject textObj = contentArray.createNestedObject();
@@ -129,7 +148,9 @@ String getAPIResponse(String inputText, bool sendImage = false) {
         JsonObject imageObj = contentArray.createNestedObject();
         imageObj["type"] = "image_url";
         imageObj["image_url"]["url"] = "data:image/jpeg;base64," + base64::encode(imageBuffer, imageIndex - END_MARKER_LEN);
-    } else {
+    }
+    else
+    {
         userMessage["content"] = inputText;
     }
     serializeJson(doc, payload);
@@ -140,53 +161,66 @@ String getAPIResponse(String inputText, bool sendImage = false) {
     http.addHeader("Authorization", "Bearer " + String(CHATGPT_API_KEY));
     int httpResponseCode = http.POST(payload);
 
-    if (httpResponseCode == 200) {
+    if (httpResponseCode == 200)
+    {
         String response = http.getString();
         DynamicJsonDocument jsonDoc(1024);
         deserializeJson(jsonDoc, response);
         outputText = jsonDoc["choices"][0]["message"]["content"].as<String>();
-    } else {
+    }
+    else
+    {
         Serial.printf("Error %i \n", httpResponseCode);
     }
     http.end();
     return outputText;
 }
 
-bool imageBufferEndsWithEndMarker() {
-    if (imageIndex < END_MARKER_LEN) return false;
-    for (size_t i = 0; i < END_MARKER_LEN; ++i) {
-        if (imageBuffer[imageIndex - END_MARKER_LEN + i] != END_MARKER[i]) {
+bool imageBufferEndsWithEndMarker()
+{
+    if (imageIndex < END_MARKER_LEN)
+        return false;
+    for (size_t i = 0; i < END_MARKER_LEN; ++i)
+    {
+        if (imageBuffer[imageIndex - END_MARKER_LEN + i] != END_MARKER[i])
+        {
             return false;
         }
     }
     return true;
 }
 
-bool takeImage() {
+bool takeImage()
+{
     Serial2.println("capture");
     memset(imageBuffer, 0, MAX_IMAGE_SIZE);
     imageIndex = 0;
     unsigned long start = millis();
     unsigned long timeDifference = 0;
-    while (!imageBufferEndsWithEndMarker()) {
+    while (!imageBufferEndsWithEndMarker())
+    {
         timeDifference = millis() - start;
-        if(timeDifference > imageTimeout) {
+        if (timeDifference > imageTimeout)
+        {
             Serial.println("Image Capture Error: Timeout reached");
             return false;
         }
-        if(imageIndex >= MAX_IMAGE_SIZE) {
+        if (imageIndex >= MAX_IMAGE_SIZE)
+        {
             Serial.println("Image Capture Error: Buffer overflow");
             return false;
         }
 
-        if (Serial2.available() > 0) {
+        if (Serial2.available() > 0)
+        {
             imageBuffer[imageIndex++] = Serial2.read();
         }
     }
     return true;
 }
 
-void setup() {
+void setup()
+{
     Serial.begin(115200);
     Serial2.begin(115200, SERIAL_8N1, CAMERA_RX_PIN, CAMERA_TX_PIN);
 
@@ -198,7 +232,8 @@ void setup() {
     String password = WIFI_PASSWORD;
     WiFi.begin(ssid.c_str(), password.c_str());
 
-    while (WiFi.status() != WL_CONNECTED) {
+    while (WiFi.status() != WL_CONNECTED)
+    {
         delay(500);
         Serial.print(".");
     }
@@ -225,21 +260,26 @@ void setup() {
     initDatabase();
 }
 
-void loop() {
-    if(isLightOn()) {
+void loop()
+{
+    if (isLightOn())
+    {
         digitalWrite(RED_LED_PIN, HIGH);
 
         // Check if any button was pressed
-        if(digitalRead(BUTTON_PIN_INSERT) == LOW || digitalRead(BUTTON_PIN_REMOVE) == LOW) {
+        if (digitalRead(BUTTON_PIN_INSERT) == LOW || digitalRead(BUTTON_PIN_REMOVE) == LOW)
+        {
             bool insertAction = digitalRead(BUTTON_PIN_INSERT) == LOW;
             bool removeAction = digitalRead(BUTTON_PIN_REMOVE) == LOW;
 
-            //Check that only one button was pressed
-            if(insertAction != removeAction) {
+            // Check that only one button was pressed
+            if (insertAction != removeAction)
+            {
                 digitalWrite(YELLOW_LED_PIN, HIGH);
-                if(takeImage()) {
+                if (takeImage())
+                {
                     debugPrintln("Image captured successfully. Image size: " + String(imageIndex) + " bytes");
-                    //printRawImageData();
+                    // printRawImageData();
                     bool hasBarcode = false;
                     String productName = "";
 
@@ -248,21 +288,27 @@ void loop() {
                     // productName = getAPIResponse("Gebe mir in einem Wort zurück, ob sich auf dem Bild ein Barcode befindet oder nicht.", true);
                     // debugPrintln("Is there a Barcode? Recognized by ChatGPT: " + productName);
 
-                    if(hasBarcode) {
+                    if (hasBarcode)
+                    {
                         // TODO: Handle Barcode
+                    }
+                    else
+                    {
+                        String finalPrompt = String(PROMPT_IMAGE_RECOGNITION) + "\n\n" + getDatabaseContentForPrompt();
+                        productName = getAPIResponse(finalPrompt, true);
 
-                    } else {
-                        productName = getAPIResponse(PROMPT_IMAGE_RECOGNITION, true);
                         debugPrintln("Product name recognized by ChatGPT: " + productName);
                     }
 
-                    if(insertAction) {
+                    if (insertAction)
+                    {
                         addItemToDatabase(productName.c_str());
                         String ttsResponse = getAPIResponse(PROMPT_ADD_PRODUCT + productName);
                         debugPrintln("TTS Response (add product): " + ttsResponse);
                         playTTSAudio(ttsResponse);
                     }
-                    if(removeAction) {
+                    if (removeAction)
+                    {
                         removeItemFromDatabase(productName.c_str());
                         String ttsResponse = getAPIResponse(PROMPT_REMOVE_PRODUCT + productName);
                         debugPrintln("TTS Response (remove product): " + ttsResponse);
@@ -273,9 +319,10 @@ void loop() {
                 digitalWrite(YELLOW_LED_PIN, LOW);
             }
         }
-    } else {
+    }
+    else
+    {
         digitalWrite(RED_LED_PIN, LOW);
         delay(500);
     }
-
 }
